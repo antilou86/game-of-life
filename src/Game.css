@@ -12,6 +12,10 @@ h3 {
     text-align: center;
     margin-top: 0;
 }
+.Cell {  
+    background: white;  
+    position: absolute;
+}
 
 
 
