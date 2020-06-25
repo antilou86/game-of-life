@@ -38,6 +38,7 @@ const Game = () => {
         }
         return board
     }
+    //handles cretion of initial board so something actually renders
     if(generation===0) {
         setBoard(makeEmptyBoard())
         setGen(generation+1)
@@ -58,9 +59,8 @@ const Game = () => {
     useEffect(()=> {
         makeCells()
     },[board])
-
+    //returns number of living neighbors
     const calculateNeighbors = (x,y,board) => {
-        //returns number of living neighbors
         let count = 0;
 
         //offset directions for all eight possible neighbors
@@ -83,7 +83,6 @@ const Game = () => {
         setIsRunning(true);
         runIteration();
     }
-
     const stopGame = () => {
         setIsRunning(false)
         if (timeoutHandler) {
@@ -91,9 +90,40 @@ const Game = () => {
             setTimeoutHandler(null);
         }
     }
-    console.log("board before runIteration()", board)
-    console.log("generation:", generation)
-
+    const clearGame = () => {
+        stopGame()
+        const newBoard = makeEmptyBoard();
+        setBoard(newBoard)
+        setGen(1)
+    }
+    const makeRandomBoard = () => {
+        let board = []
+        //creates empty arrays equal to number of rows.
+        for(let y=0; y<rows; y++){
+            board[y] =[];
+            //populates those with columns
+            for(let x=0; x<cols; x++){
+                let oneOrZero = Math.round(Math.random())
+                if(oneOrZero===1){
+                    board[y][x] = false;
+                } else {
+                    board[y][x] = true;
+                }
+            }
+        }
+        setBoard(board)
+    }
+    const boardsMatch = (arr1, arr2) => {
+        for(let y=0; y < arr1.length; y++) {
+            for(let x=0; x<arr1.length;x++){
+                if(arr1[y][x] !== arr2[y][x]){
+                    return false
+                }
+            }
+        }
+        return true
+    }
+    //iterates through a single generation and triggers the next one.
     const runIteration = () => {
         setGen(generation + 1)
         let newBoard = makeEmptyBoard();
@@ -117,14 +147,16 @@ const Game = () => {
                 }
             }
         }
-
+        if(boardsMatch(newBoard, board)){
+            alert("no valid moves left")
+            stopGame()
+        }
         setBoard(newBoard);
         makeCells();
 
         //trigger the below useEffect
         setTimeTrigger(!timeTrigger)
     }
-    
     //if isRunning, waits until timer runs out and runs the next gen
     useEffect(()=>{
         if(isRunning){
@@ -135,8 +167,6 @@ const Game = () => {
             return ()=>clearTimeout(timeoutHandler)
         }
     },[timeTrigger])
-
-
     //helper function to pull x,y coordinates off of the window
     const getElementOffset = (e) => {
         const rect = e.target.getBoundingClientRect();
@@ -146,7 +176,6 @@ const Game = () => {
             y:(rect.top + window.pageYOffset) + doc.clientTop,
         }
     }
-
     const handleClick = (event) => {
         //checks to see where the click is coming from in relation to the board size and screen/window width
         const elemOffset = getElementOffset(event)
@@ -172,19 +201,21 @@ const Game = () => {
             setBoard(updateBoard)
         }
     }
-
     return(
         <>
         <div className = "Board" style={{width:width, height:height, backgroundSize:`${cellSize}px ${cellSize}px`}} onClick={handleClick}>
             {cells && cells.map((cel) => {return(<Cell x={cel.x} y={cel.y} cellSize={cellSize} key={`${cel.x},${cel.y}`} />)})}
         </div>
+        <p style={{textAlign:"center"}}>{`CURRENT GENERATION: ${generation}`}</p>
         <div className="Controls">Update every 
             <input value={interval} onChange={handleIntervalChange}/>msec 
             {
               isRunning? 
-              <button className="button" onClick={stopGame}>STOP</button>
-              :<button className="button" onClick={startGame}>START</button>
+              <button className="Button" onClick={stopGame}>STOP</button>
+              :<button className="Button" onClick={startGame}>START</button>
             }
+            <button className="Button" onClick={clearGame}>CLEAR</button>
+            <button className="Button" onClick={makeRandomBoard}>Random board</button>
         </div>
         </>
     ) 
