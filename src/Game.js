@@ -1,4 +1,4 @@
-import React, {useState, useEffect} from 'react';
+import React, {useState, useEffect, useRef} from 'react';
 import Cell from './Cell';
 import './Game.css';
 
@@ -13,8 +13,15 @@ const Game = () => {
     const [board, setBoard] = useState([]);
     const [lastTouched, setLastTouch] = useState([]);
     const [isRunning, setIsRunning] = useState(false);
-    const [interval, setInterval] = useState(100);
-    const [timeoutHandler, setTimeoutHandler] = useState()
+    const [interval, setInterval] = useState(1000);
+    const [timeoutHandler, setTimeoutHandler] = useState(null);
+    const [generation, setGen] = useState(0);
+    const [timeTrigger, setTimeTrigger] = useState(true)
+
+    //reference helper to avoid a bug with the timer in runIteration
+    const intRef = useRef(interval);
+    intRef.current = interval;
+
     const handleIntervalChange= (e) => {
         setInterval(e.target.value)
     }
@@ -31,10 +38,26 @@ const Game = () => {
         }
         return board
     }
-    
-    useEffect(()=> {
+    if(generation===0) {
         setBoard(makeEmptyBoard())
-    },[])
+        setGen(generation+1)
+    }
+   //will create cells from the board state. 
+   const makeCells = () => {
+        let cells = [];
+        for(let y=0; y<rows; y++) {
+            for(let x=0; x<cols; x++){
+                if (board.length>1 && board[y][x]){
+                    cells.push({ x, y });
+                }
+            }
+        }
+        setCells(cells)
+    }
+    //whenever the board changes, redraw the cells
+    useEffect(()=> {
+        makeCells()
+    },[board])
 
     const calculateNeighbors = (x,y,board) => {
         //returns number of living neighbors
@@ -56,16 +79,28 @@ const Game = () => {
         }
         return count
     }
+    const startGame = () => {
+        setIsRunning(true);
+        runIteration();
+    }
 
+    const stopGame = () => {
+        setIsRunning(false)
+        if (timeoutHandler) {
+            clearTimeout(timeoutHandler);
+            setTimeoutHandler(null);
+        }
+    }
     console.log("board before runIteration()", board)
+    console.log("generation:", generation)
+
     const runIteration = () => {
-        console.log('running iteration');
-        console.log("board inside run iteration", board)
+        setGen(generation + 1)
         let newBoard = makeEmptyBoard();
-        //loop through board
+
+        //loop through board and update the new one
         for(let y=0; y<rows; y++) {
             for(let x=0; x<cols; x++){
-
                 let neighbors = calculateNeighbors(x,y,board)
 
                 //if its a living cell and has two or three neighbors it stays the same
@@ -82,22 +117,25 @@ const Game = () => {
                 }
             }
         }
-        setBoard(newBoard)
-        setCells(makeCells())
-        setTimeoutHandler(window.setTimeout(()=>{runIteration()}, interval))
-    }
-    const startGame = () => {
-        setIsRunning(true);
-        runIteration();
-    }
 
-    const stopGame = () => {
-        setIsRunning(false)
-        if (timeoutHandler) {
-            window.clearTimeout(timeoutHandler);
-            setTimeoutHandler(null);
-        }
+        setBoard(newBoard);
+        makeCells();
+
+        //trigger the below useEffect
+        setTimeTrigger(!timeTrigger)
     }
+    
+    //if isRunning, waits until timer runs out and runs the next gen
+    useEffect(()=>{
+        if(isRunning){
+            setTimeoutHandler(setTimeout(()=>{
+                runIteration();
+            },intRef.current))
+
+            return ()=>clearTimeout(timeoutHandler)
+        }
+    },[timeTrigger])
+
 
     //helper function to pull x,y coordinates off of the window
     const getElementOffset = (e) => {
@@ -109,37 +147,16 @@ const Game = () => {
         }
     }
 
-    //will create cells from the board state. 
-    const makeCells = () => {
-        let cells = [];
-        for(let y=0; y<rows; y++) {
-            for(let x=0; x<cols; x++){
-                if (board.length>1 && board[y][x]){
-                    cells.push({ x, y });
-                }
-            }
-        }
-        setCells(cells)
-    }
-    useEffect(()=> {
-        makeCells()
-    },[board])
-
-    //checks to see where the click is coming from in relation to the board size and screen/window width
     const handleClick = (event) => {
+        //checks to see where the click is coming from in relation to the board size and screen/window width
         const elemOffset = getElementOffset(event)
         const offsetX = event.clientX - elemOffset.x;
         const offsetY = event.clientY - elemOffset.y;
         const x = Math.floor(offsetX / cellSize);
         const y = Math.floor(offsetY / cellSize);
-        //if the click falls within our grid (adjusted for window offset) toggle the clicked square between (true|false)
-        console.log(x,y)
-        console.log(cells)
-        console.log("lastTouched1=",lastTouched)
-        // lastTouched.push({ x, y })
         setLastTouch(prevTouched => ([...prevTouched, {x,y}]))
-        console.log("lastTouched2=",lastTouched)
 
+        //honestly, kind of a hacky fix for a bug causing cell[0][0] to render/not-display when trying to unclick another cell.
         if(x===0 && y===0 && (lastTouched[lastTouched.length-1].x !== 0 || lastTouched[lastTouched.length-1].y !==0)) {
             let updateBoard = [...board]
             const lastY = lastTouched[lastTouched.length-1].y
@@ -148,25 +165,27 @@ const Game = () => {
             setBoard(updateBoard)            
             setLastTouch(prevTouched => (prevTouched.slice(0,prevTouched.length-2)))
         }
-
+        //if the click falls within our grid (adjusted for window offset) toggle the clicked square between (true|false)
         else if(x >= 0 && x <= cols && y >= 0 && y <= rows) {
             let updateBoard = [...board]
-            updateBoard[y][x] =!updateBoard[y][x]
+            updateBoard[y][x] = !updateBoard[y][x]
             setBoard(updateBoard)
         }
-
     }
 
     return(
         <>
         <div className = "Board" style={{width:width, height:height, backgroundSize:`${cellSize}px ${cellSize}px`}} onClick={handleClick}>
+            {cells && cells.map((cel) => {return(<Cell x={cel.x} y={cel.y} cellSize={cellSize} key={`${cel.x},${cel.y}`} />)})}
+        </div>
+        <div className="Controls">Update every 
+            <input value={interval} onChange={handleIntervalChange}/>msec 
             {
-                cells && cells.map((cel) => {
-                    return(<Cell x={cel.x} y={cel.y} cellSize={cellSize} key={`${cel.x},${cel.y}`} />)
-                })
+              isRunning? 
+              <button className="button" onClick={stopGame}>STOP</button>
+              :<button className="button" onClick={startGame}>START</button>
             }
         </div>
-        <div className="controls">Update every <input value={interval} onChange={handleIntervalChange}/>msec {isRunning? <button className="button" onClick={stopGame}>STOP</button>:<button className="button" onClick={startGame}>START</button>}</div>
         </>
     ) 
 }
